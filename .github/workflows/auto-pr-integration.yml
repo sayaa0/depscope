@@ -1,0 +1,37 @@
+name: auto-pr-integration
+
+on:
+  pull_request:
+    paths:
+      - 'examples/auto-consumer/package.json'
+      - 'examples/auto-consumer/package-lock.json'
+
+permissions:
+  contents: read
+
+jobs:
+  auto-detect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Run DepScope without package/from/to inputs
+        id: depscope
+        uses: ./
+        with:
+          project_dir: examples/auto-consumer
+          manifest_dir: examples/auto-consumer
+          fail_on_breaking: 'false'
+      - name: Assert PR auto-detection result
+        shell: bash
+        env:
+          DETECTED: ${{ steps.depscope.outputs.detected_update_count }}
+          ANALYZED: ${{ steps.depscope.outputs.analyzed_update_count }}
+          BREAKING: ${{ steps.depscope.outputs.breaking_count }}
+          UPDATES: ${{ steps.depscope.outputs.updates_json }}
+        run: |
+          test "$DETECTED" = "1"
+          test "$ANALYZED" = "1"
+          test "$BREAKING" -gt 0
+          echo "$UPDATES" | grep -q '"package":"zod"'
+          echo "$UPDATES" | grep -q '"from":"3.23.8"'
+          echo "$UPDATES" | grep -q '"to":"4.0.0"'
