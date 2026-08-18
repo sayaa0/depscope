@@ -20,6 +20,11 @@ test('filters package changes to symbols actually used by the project', () => {
     impact.affectedChanges.map(change => change.symbol).sort(),
     ['parse', 'removed']
   );
+  assert.deepEqual(
+    impact.breakingChanges.map(change => change.symbol).sort(),
+    ['parse', 'removed']
+  );
+  assert.equal(impact.compatibleChanges.length, 0);
   assert.equal(impact.unrelatedChanges.length, 0);
   assert.ok(impact.affectedChanges.every(change => change.files.includes('index.ts')));
 });
