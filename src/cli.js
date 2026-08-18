@@ -4,7 +4,7 @@ import { fetchPackageVersion } from './fetch-package.js';
 import { filterChangesByUsage, scanProjectUsage } from './usage.js';
 
 function usage() {
-  console.log(`depscope 0.0.1\n\nUsage:\n  depscope compare <package> <from> <to> [--json]\n  depscope impact <package> <from> <to> [projectDir] [--json]\n\nExamples:\n  depscope compare zod 3.22.4 4.0.0\n  depscope impact zod 3.22.4 4.0.0 .\n`);
+  console.log(`ts-upgrade-impact 0.0.1\n\nUsage:\n  ts-upgrade-impact compare <package> <from> <to> [--json]\n  ts-upgrade-impact impact <package> <from> <to> [projectDir] [--json]\n\nExamples:\n  ts-upgrade-impact compare zod 3.22.4 4.0.0\n  ts-upgrade-impact impact zod 3.22.4 4.0.0 .\n`);
 }
 
 function formatSignature(shape) {
@@ -30,7 +30,7 @@ function formatChange(change, files = null) {
 }
 
 function formatHuman(pkg, from, to, result) {
-  console.log(`DepScope: ${pkg} ${from} -> ${to}`);
+  console.log(`TS Upgrade Impact: ${pkg} ${from} -> ${to}`);
   console.log(`Breaking supported changes: ${result.breakingChanges.length}`);
   console.log(`Compatible supported changes: ${result.compatibleChanges.length}`);
   console.log('');
@@ -50,7 +50,7 @@ function formatHuman(pkg, from, to, result) {
 }
 
 function formatImpact(pkg, from, to, impact) {
-  console.log(`DepScope impact: ${pkg} ${from} -> ${to}`);
+  console.log(`TS Upgrade Impact: ${pkg} ${from} -> ${to}`);
   console.log(`Detected package API paths: ${impact.importedSymbols.length}`);
   console.log(`Relevant supported changes: ${impact.affectedChanges.length}`);
   console.log(`Relevant breaking changes: ${impact.breakingChanges.length}`);
@@ -123,6 +123,6 @@ async function main() {
 }
 
 main().catch(error => {
-  console.error(`depscope: ${error.message}`);
+  console.error(`ts-upgrade-impact: ${error.message}`);
   process.exitCode = 1;
 });
