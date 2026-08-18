@@ -120,3 +120,64 @@ jobs:
         with:
           name: depscope-real-consumer-impact
           path: consumer-impact.json
+
+  known-breaking-consumer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+      - run: npm install
+      - name: Checkout consumer with known Zod 3 APIs removed in Zod 4
+        uses: actions/checkout@v6
+        with:
+          repository: qqharry21/my-portfolio-ts
+          ref: 0caae5a6ce6e78c95cee899998d1454b614afaf3
+          path: breaking-consumer
+      - name: Run impact analysis against known breaking consumer
+        run: node src/cli.js impact zod 3.23.8 4.0.0 breaking-consumer --json > known-breaking-impact.json
+      - name: Assert and summarize detected breaking impact
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const r = JSON.parse(fs.readFileSync('known-breaking-impact.json', 'utf8'));
+          if (!Array.isArray(r.breakingChanges) || !Array.isArray(r.compatibleChanges)) process.exit(1);
+
+          const lines = [
+            '# DepScope known-breaking consumer',
+            '',
+            'Consumer: `qqharry21/my-portfolio-ts`',
+            '',
+            `- Detected package API paths: ${r.importedSymbols.length}`,
+            `- Relevant supported changes: ${r.affectedChanges.length}`,
+            `- **Relevant breaking changes: ${r.breakingChanges.length}**`,
+            `- Relevant compatible changes: ${r.compatibleChanges.length}`,
+            `- Filtered package changes: ${r.unrelatedChanges.length}`,
+            ''
+          ];
+
+          if (r.breakingChanges.length) {
+            lines.push('## Breaking changes detected', '');
+            for (const c of r.breakingChanges) {
+              const files = (c.files || []).map(f => `\`${f}\``).join(', ') || '-';
+              lines.push(`- **\`${c.symbol}\`** — \`${c.type}\` — files: ${files}`);
+              if (c.reasons?.length) lines.push(`  - reason: ${c.reasons.join(', ')}`);
+            }
+            lines.push('');
+          }
+
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join('\n'));
+          console.log(JSON.stringify(r, null, 2));
+
+          if (r.breakingChanges.length === 0) {
+            console.error('Expected at least one breaking change in the known-breaking consumer.');
+            process.exit(1);
+          }
+          NODE
+      - name: Upload known breaking impact result
+        uses: actions/upload-artifact@v4
+        with:
+          name: depscope-known-breaking-impact
+          path: known-breaking-impact.json
