@@ -1,6 +1,6 @@
-# DepScope
+# TS Upgrade Impact
 
-DepScope is an experimental GitHub Action and CLI that asks a narrow question about an npm dependency upgrade:
+TS Upgrade Impact is an experimental GitHub Action and CLI that asks a narrow question about an npm dependency upgrade:
 
 > Which supported declaration changes actually intersect APIs used by this TypeScript repository?
 
@@ -8,7 +8,7 @@ It is deliberately precision-first. Unsupported or ambiguous TypeScript patterns
 
 ## GitHub Action: PR auto-detection
 
-For npm projects using `package-lock.json`, DepScope can infer direct dependency version changes from the pull request base/head. You do not need to specify the package name or versions.
+For npm projects using `package-lock.json`, TS Upgrade Impact can infer direct dependency version changes from the pull request base/head. You do not need to specify the package name or versions.
 
 ```yaml
 name: dependency-impact
@@ -20,11 +20,11 @@ permissions:
   contents: read
 
 jobs:
-  depscope:
+  dependency-impact:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: sayaa0/depscope@main
+      - uses: sayaa0/ts-upgrade-impact@main
         with:
           fail_on_breaking: 'true'
 ```
@@ -45,7 +45,7 @@ Multiple direct dependency updates can be detected in one PR. Packages outside t
 ## Monorepo / nested package
 
 ```yaml
-- uses: sayaa0/depscope@main
+- uses: sayaa0/ts-upgrade-impact@main
   with:
     manifest_dir: apps/web
     project_dir: apps/web
@@ -59,7 +59,7 @@ Auto-detection currently requires `package-lock.json` at both PR refs.
 You can still provide an explicit package/version pair:
 
 ```yaml
-- uses: sayaa0/depscope@main
+- uses: sayaa0/ts-upgrade-impact@main
   with:
     package: zod
     from: 3.23.8
@@ -132,16 +132,16 @@ Call-domain relaxation, such as reducing the number of required parameters, is r
 
 The repository includes real-consumer tests rather than fixture-only tests.
 
-In one known Zod 3 → Zod 4 consumer, DepScope predicted 27 breaking API names in a specific source file. After forcing that repository onto Zod 4 and running `tsc --noEmit`, all 27 predicted leaf API names appeared in the compiler error log. This is one validation case, not a general precision claim.
+In one known Zod 3 → Zod 4 consumer, TS Upgrade Impact predicted 27 breaking API names in a specific source file. After forcing that repository onto Zod 4 and running `tsc --noEmit`, all 27 predicted leaf API names appeared in the compiler error log. This is one validation case, not a general precision claim.
 
-A separate real consumer using `z.object()` produced one relevant declaration change, which DepScope classified as compatible and therefore reported zero supported breaking changes.
+A separate real consumer using `z.object()` produced one relevant declaration change, which TS Upgrade Impact classified as compatible and therefore reported zero supported breaking changes.
 
-There is also an end-to-end pull-request integration fixture where no package/from/to inputs are supplied; DepScope infers `zod 3.23.8 → 4.0.0` from the PR and detects the expected breaking usage.
+There is also an end-to-end pull-request integration fixture where no package/from/to inputs are supplied; TS Upgrade Impact infers `zod 3.23.8 → 4.0.0` from the PR and detects the expected breaking usage.
 
 ## Privacy / trust boundary
 
-There is currently no DepScope application server. Consumer source scanning and package declaration comparison run inside the GitHub Actions runner. PR auto-detection reads only the repository's package metadata (`package.json` and `package-lock.json`) at the base/head refs using the workflow's GitHub token.
+There is currently no TS Upgrade Impact application server. Consumer source scanning and package declaration comparison run inside the GitHub Actions runner. PR auto-detection reads only the repository's package metadata (`package.json` and `package-lock.json`) at the base/head refs using the workflow's GitHub token.
 
 ## Principle
 
-Precision first. A missing warning is preferable to a confident warning that DepScope cannot justify from the supported declaration and usage model.
+Precision first. A missing warning is preferable to a confident warning that TS Upgrade Impact cannot justify from the supported declaration and usage model.
