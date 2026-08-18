@@ -45,7 +45,6 @@ function isTargetModule(specifier, packageName) {
 export function scanProjectUsage(projectRoot, packageName) {
   const root = path.resolve(projectRoot);
   const usages = new Map();
-  const namespaceImports = new Map();
   const unsupported = [];
 
   for (const file of walkSourceFiles(root)) {
@@ -58,7 +57,8 @@ export function scanProjectUsage(projectRoot, packageName) {
       file.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS
     );
 
-    const namespaces = new Set();
+    const namespaceLocals = new Set();
+    const namedLocals = new Map();
 
     for (const statement of source.statements) {
       if (ts.isImportDeclaration(statement) && ts.isStringLiteral(statement.moduleSpecifier)) {
@@ -74,10 +74,12 @@ export function scanProjectUsage(projectRoot, packageName) {
 
         if (clause.namedBindings && ts.isNamedImports(clause.namedBindings)) {
           for (const element of clause.namedBindings.elements) {
-            addUsage(usages, element.propertyName?.text ?? element.name.text, file);
+            const exportedName = element.propertyName?.text ?? element.name.text;
+            addUsage(usages, exportedName, file);
+            namedLocals.set(element.name.text, exportedName);
           }
         } else if (clause.namedBindings && ts.isNamespaceImport(clause.namedBindings)) {
-          namespaces.add(clause.namedBindings.name.text);
+          namespaceLocals.add(clause.namedBindings.name.text);
         }
       }
 
@@ -95,27 +97,26 @@ export function scanProjectUsage(projectRoot, packageName) {
     }
 
     function visit(node) {
-      if (
-        ts.isPropertyAccessExpression(node) &&
-        ts.isIdentifier(node.expression) &&
-        namespaces.has(node.expression.text)
-      ) {
-        addUsage(usages, node.name.text, file);
+      if (ts.isPropertyAccessExpression(node) && ts.isIdentifier(node.expression)) {
+        const local = node.expression.text;
+        if (namespaceLocals.has(local)) {
+          addUsage(usages, node.name.text, file);
+        }
+
+        const exportedName = namedLocals.get(local);
+        if (exportedName) {
+          addUsage(usages, `${exportedName}.${node.name.text}`, file);
+        }
       }
       ts.forEachChild(node, visit);
     }
     visit(source);
-
-    for (const local of namespaces) {
-      namespaceImports.set(`${file}:${local}`, { file, local });
-    }
   }
 
   return {
     root,
     usages,
     unsupported,
-    namespaceImports: [...namespaceImports.values()],
   };
 }
 
