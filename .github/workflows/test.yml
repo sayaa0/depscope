@@ -73,21 +73,42 @@ jobs:
           const fs = require('fs');
           const r = JSON.parse(fs.readFileSync('consumer-impact.json', 'utf8'));
           if (!Array.isArray(r.importedSymbols) || !Array.isArray(r.affectedChanges) || !Array.isArray(r.unrelatedChanges)) process.exit(1);
+
           const lines = [
             '# DepScope real-consumer impact',
             '',
             'Consumer: `alephmatic/full-stack-ai`',
             '',
-            `- Detected imported root symbols: ${r.importedSymbols.length} (${r.importedSymbols.join(', ') || 'none'})`,
+            `- Detected package API paths: ${r.importedSymbols.length} (${r.importedSymbols.join(', ') || 'none'})`,
             `- Relevant supported changes: ${r.affectedChanges.length}`,
             `- Filtered package changes: ${r.unrelatedChanges.length}`,
             `- Unsupported usage patterns: ${r.unsupportedUsage?.length ?? 0}`,
-            '',
-            r.affectedChanges.length === 0
-              ? '> Observation: the current root-symbol model found no direct impact. This is useful evidence that nested API usage such as `z.object()` needs separate treatment.'
-              : '> Observation: the current model found direct root-symbol impact in a real consumer.',
             ''
           ];
+
+          if (r.affectedChanges.length) {
+            lines.push('## Relevant changes', '');
+            for (const c of r.affectedChanges) {
+              const files = (c.files || []).map(f => `\`${f}\``).join(', ') || '-';
+              const before = c.before
+                ? `${c.before.requiredParams} required / ${c.before.totalParams} total${c.before.hasRest ? ' / rest' : ''}`
+                : '-';
+              const after = c.after
+                ? `${c.after.requiredParams} required / ${c.after.totalParams} total${c.after.hasRest ? ' / rest' : ''}`
+                : '-';
+              lines.push(`- **\`${c.symbol}\`** — \`${c.type}\` — files: ${files}`);
+              if (c.before || c.after) lines.push(`  - signature: ${before} → ${after}`);
+            }
+            lines.push('');
+          }
+
+          lines.push(
+            r.affectedChanges.length === 0
+              ? '> Observation: no supported declaration change intersected the detected API paths.'
+              : '> Observation: supported declaration changes intersected API paths actually used by this repository.',
+            ''
+          );
+
           fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join('\n'));
           console.log(JSON.stringify(r, null, 2));
           NODE
