@@ -1,0 +1,39 @@
+name: release-smoke
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/release-smoke.yml
+
+jobs:
+  published-tag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Checkout known-breaking Zod consumer
+        uses: actions/checkout@v6
+        with:
+          repository: qqharry21/my-portfolio-ts
+          ref: 0caae5a6ce6e78c95cee899998d1454b614afaf3
+          path: consumer
+
+      - name: Run published TS Upgrade Impact v0.1.0
+        id: impact
+        uses: sayaa0/ts-upgrade-impact@v0.1.0
+        with:
+          package: zod
+          from: 3.23.8
+          to: 4.0.0
+          project_dir: consumer
+          fail_on_breaking: 'false'
+
+      - name: Assert published release works
+        shell: bash
+        env:
+          BREAKING: ${{ steps.impact.outputs.breaking_count }}
+          RELEVANT: ${{ steps.impact.outputs.relevant_count }}
+        run: |
+          test "$BREAKING" -gt 0
+          test "$RELEVANT" -ge "$BREAKING"
