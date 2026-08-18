@@ -24,12 +24,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: sayaa0/ts-upgrade-impact@main
+      - uses: sayaa0/ts-upgrade-impact@v0.1.0
         with:
           fail_on_breaking: 'true'
 ```
-
-During the current experimental phase, `@main` is used. A stable version tag should be used once the first release is published.
 
 The Action:
 
@@ -45,7 +43,7 @@ Multiple direct dependency updates can be detected in one PR. Packages outside t
 ## Monorepo / nested package
 
 ```yaml
-- uses: sayaa0/ts-upgrade-impact@main
+- uses: sayaa0/ts-upgrade-impact@v0.1.0
   with:
     manifest_dir: apps/web
     project_dir: apps/web
@@ -59,7 +57,7 @@ Auto-detection currently requires `package-lock.json` at both PR refs.
 You can still provide an explicit package/version pair:
 
 ```yaml
-- uses: sayaa0/ts-upgrade-impact@main
+- uses: sayaa0/ts-upgrade-impact@v0.1.0
   with:
     package: zod
     from: 3.23.8
