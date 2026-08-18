@@ -171,7 +171,7 @@ export function classifyCallableCompatibility(before, after) {
   if (after.requiredParams > before.requiredParams) {
     reasons.push('required-parameter-added');
   }
-  if (after.totalParams < before.totalParams) {
+  if (after.totalParams < before.totalParams && !after.hasRest) {
     reasons.push('accepted-parameter-removed');
   }
   if (before.hasRest && !after.hasRest) {
