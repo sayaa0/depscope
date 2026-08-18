@@ -25,8 +25,8 @@ for (const [pkg, from, to] of cases) {
     const after = analyzePackageDeclarations(newPkg.packageDir);
     const result = diffAnalyses(before, after);
 
-    const removed = result.changes.filter(c => c.type === 'removed-symbol').length;
-    const arity = result.changes.filter(c => c.type === 'function-arity-change').length;
+    const removed = result.changes.filter(c => c.type === 'removed-symbol' || c.type === 'removed-member').length;
+    const arity = result.changes.filter(c => c.type === 'function-arity-change' || c.type === 'member-arity-change').length;
 
     rows.push({
       package: pkg,
@@ -38,6 +38,8 @@ for (const [pkg, from, to] of cases) {
       removed,
       arity,
       changes: result.changes.length,
+      breaking: result.breakingChanges.length,
+      compatible: result.compatibleChanges.length,
       notAnalyzed: result.notAnalyzed.length,
     });
   } catch (error) {
@@ -58,15 +60,15 @@ console.log(JSON.stringify(rows, null, 2));
 const header = [
   '# DepScope real-package benchmark',
   '',
-  '| package | upgrade | status | old exports | new exports | removed | arity changes | not analyzed |',
-  '|---|---|---:|---:|---:|---:|---:|---:|',
+  '| package | upgrade | status | old exports | new exports | supported changes | breaking | compatible | not analyzed |',
+  '|---|---|---:|---:|---:|---:|---:|---:|---:|',
 ];
 
 const table = rows.map(r => {
   if (r.status === 'error') {
-    return `| ${r.package} | ${r.from} → ${r.to} | error | - | - | - | - | - |`;
+    return `| ${r.package} | ${r.from} → ${r.to} | error | - | - | - | - | - | - |`;
   }
-  return `| ${r.package} | ${r.from} → ${r.to} | ok | ${r.oldSymbols} | ${r.newSymbols} | ${r.removed} | ${r.arity} | ${r.notAnalyzed} |`;
+  return `| ${r.package} | ${r.from} → ${r.to} | ok | ${r.oldSymbols} | ${r.newSymbols} | ${r.changes} | ${r.breaking} | ${r.compatible} | ${r.notAnalyzed} |`;
 });
 
 const errors = rows
