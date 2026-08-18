@@ -1,0 +1,62 @@
+name: action-integration
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  safe-consumer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Checkout real Zod consumer
+        uses: actions/checkout@v6
+        with:
+          repository: alephmatic/full-stack-ai
+          ref: f601758736f8ad64c384c25f0f52b1d54c41f779
+          path: consumer-safe
+      - name: Run DepScope Action
+        id: depscope
+        uses: ./
+        with:
+          package: zod
+          from: 3.22.4
+          to: 4.0.0
+          project_dir: consumer-safe
+          fail_on_breaking: 'true'
+      - name: Assert safe consumer result
+        shell: bash
+        env:
+          BREAKING: ${{ steps.depscope.outputs.breaking_count }}
+          RELEVANT: ${{ steps.depscope.outputs.relevant_count }}
+        run: |
+          test "$BREAKING" = "0"
+          test "$RELEVANT" = "1"
+
+  breaking-consumer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Checkout known-breaking Zod consumer
+        uses: actions/checkout@v6
+        with:
+          repository: qqharry21/my-portfolio-ts
+          ref: 0caae5a6ce6e78c95cee899998d1454b614afaf3
+          path: consumer-breaking
+      - name: Run DepScope Action
+        id: depscope
+        uses: ./
+        with:
+          package: zod
+          from: 3.23.8
+          to: 4.0.0
+          project_dir: consumer-breaking
+          fail_on_breaking: 'false'
+      - name: Assert breaking consumer result
+        shell: bash
+        env:
+          BREAKING: ${{ steps.depscope.outputs.breaking_count }}
+          RELEVANT: ${{ steps.depscope.outputs.relevant_count }}
+        run: |
+          test "$BREAKING" -gt 0
+          test "$RELEVANT" -ge "$BREAKING"
