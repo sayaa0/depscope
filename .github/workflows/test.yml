@@ -33,3 +33,19 @@ jobs:
         run: |
           node -e "const fs=require('fs'); const r=JSON.parse(fs.readFileSync('smoke.json','utf8')); if(r.package!=='zod'||r.from!=='3.22.4'||r.to!=='4.0.0'||!Array.isArray(r.changes)||!Array.isArray(r.notAnalyzed)) process.exit(1); console.log('changes:', r.changes.length, 'notAnalyzed:', r.notAnalyzed.length);"
           cat smoke.json
+
+  real-package-benchmark:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+      - run: npm install
+      - name: Benchmark representative npm upgrades
+        run: node scripts/benchmark.js
+      - name: Upload benchmark result
+        uses: actions/upload-artifact@v4
+        with:
+          name: depscope-benchmark
+          path: benchmark.json
