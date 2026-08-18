@@ -49,3 +49,50 @@ jobs:
         with:
           name: depscope-benchmark
           path: benchmark.json
+
+  real-consumer-impact:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+      - run: npm install
+      - name: Checkout real Zod consumer
+        uses: actions/checkout@v6
+        with:
+          repository: alephmatic/full-stack-ai
+          ref: f601758736f8ad64c384c25f0f52b1d54c41f779
+          path: consumer
+      - name: Run impact analysis against real consumer
+        run: node src/cli.js impact zod 3.22.4 4.0.0 consumer --json > consumer-impact.json
+      - name: Summarize real consumer impact
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const r = JSON.parse(fs.readFileSync('consumer-impact.json', 'utf8'));
+          if (!Array.isArray(r.importedSymbols) || !Array.isArray(r.affectedChanges) || !Array.isArray(r.unrelatedChanges)) process.exit(1);
+          const lines = [
+            '# DepScope real-consumer impact',
+            '',
+            'Consumer: `alephmatic/full-stack-ai`',
+            '',
+            `- Detected imported root symbols: ${r.importedSymbols.length} (${r.importedSymbols.join(', ') || 'none'})`,
+            `- Relevant supported changes: ${r.affectedChanges.length}`,
+            `- Filtered package changes: ${r.unrelatedChanges.length}`,
+            `- Unsupported usage patterns: ${r.unsupportedUsage?.length ?? 0}`,
+            '',
+            r.affectedChanges.length === 0
+              ? '> Observation: the current root-symbol model found no direct impact. This is useful evidence that nested API usage such as `z.object()` needs separate treatment.'
+              : '> Observation: the current model found direct root-symbol impact in a real consumer.',
+            ''
+          ];
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join('\n'));
+          console.log(JSON.stringify(r, null, 2));
+          NODE
+      - name: Upload consumer impact result
+        uses: actions/upload-artifact@v4
+        with:
+          name: depscope-real-consumer-impact
+          path: consumer-impact.json
