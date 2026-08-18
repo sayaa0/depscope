@@ -10,16 +10,20 @@ branding:
 
 inputs:
   package:
-    description: npm package name to analyze
-    required: true
+    description: npm package name to analyze; omit with from/to to auto-detect dependency updates from a pull request
+    required: false
   from:
-    description: old package version
-    required: true
+    description: old package version; omit with package/to for pull request auto-detection
+    required: false
   to:
-    description: new package version
-    required: true
+    description: new package version; omit with package/from for pull request auto-detection
+    required: false
   project_dir:
-    description: consumer project directory to scan
+    description: consumer project directory to scan in the checked-out head revision
+    required: false
+    default: .
+  manifest_dir:
+    description: directory containing package.json and package-lock.json for pull request auto-detection
     required: false
     default: .
   fail_on_breaking:
@@ -28,6 +32,15 @@ inputs:
     default: 'false'
 
 outputs:
+  detected_update_count:
+    description: number of direct dependency updates detected
+    value: ${{ steps.depscope.outputs.detected_update_count }}
+  analyzed_update_count:
+    description: number of detected updates successfully analyzed
+    value: ${{ steps.depscope.outputs.analyzed_update_count }}
+  unsupported_update_count:
+    description: number of detected updates skipped because the current MVP cannot analyze them
+    value: ${{ steps.depscope.outputs.unsupported_update_count }}
   breaking_count:
     description: number of relevant supported breaking changes
     value: ${{ steps.depscope.outputs.breaking_count }}
@@ -40,6 +53,9 @@ outputs:
   filtered_count:
     description: number of package changes filtered as unrelated to detected usage
     value: ${{ steps.depscope.outputs.filtered_count }}
+  updates_json:
+    description: JSON array of detected package/from/to updates
+    value: ${{ steps.depscope.outputs.updates_json }}
 
 runs:
   using: composite
@@ -57,5 +73,7 @@ runs:
         DEPSCOPE_FROM: ${{ inputs.from }}
         DEPSCOPE_TO: ${{ inputs.to }}
         DEPSCOPE_PROJECT_DIR: ${{ inputs.project_dir }}
+        DEPSCOPE_MANIFEST_DIR: ${{ inputs.manifest_dir }}
         DEPSCOPE_FAIL_ON_BREAKING: ${{ inputs.fail_on_breaking }}
+        DEPSCOPE_GITHUB_TOKEN: ${{ github.token }}
       run: node "${{ github.action_path }}/src/action-runner.js"
