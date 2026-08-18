@@ -31,7 +31,7 @@ jobs:
       - name: Validate smoke output
         shell: bash
         run: |
-          node -e "const fs=require('fs'); const r=JSON.parse(fs.readFileSync('smoke.json','utf8')); if(r.package!=='zod'||r.from!=='3.22.4'||r.to!=='4.0.0'||!Array.isArray(r.changes)||!Array.isArray(r.notAnalyzed)) process.exit(1); console.log('changes:', r.changes.length, 'notAnalyzed:', r.notAnalyzed.length);"
+          node -e "const fs=require('fs'); const r=JSON.parse(fs.readFileSync('smoke.json','utf8')); if(r.package!=='zod'||r.from!=='3.22.4'||r.to!=='4.0.0'||!Array.isArray(r.changes)||!Array.isArray(r.breakingChanges)||!Array.isArray(r.compatibleChanges)||!Array.isArray(r.notAnalyzed)) process.exit(1); console.log('changes:', r.changes.length, 'breaking:', r.breakingChanges.length, 'compatible:', r.compatibleChanges.length, 'notAnalyzed:', r.notAnalyzed.length);"
           cat smoke.json
 
   real-package-benchmark:
@@ -72,7 +72,7 @@ jobs:
           node <<'NODE'
           const fs = require('fs');
           const r = JSON.parse(fs.readFileSync('consumer-impact.json', 'utf8'));
-          if (!Array.isArray(r.importedSymbols) || !Array.isArray(r.affectedChanges) || !Array.isArray(r.unrelatedChanges)) process.exit(1);
+          if (!Array.isArray(r.importedSymbols) || !Array.isArray(r.affectedChanges) || !Array.isArray(r.breakingChanges) || !Array.isArray(r.compatibleChanges) || !Array.isArray(r.unrelatedChanges)) process.exit(1);
 
           const lines = [
             '# DepScope real-consumer impact',
@@ -81,6 +81,8 @@ jobs:
             '',
             `- Detected package API paths: ${r.importedSymbols.length} (${r.importedSymbols.join(', ') || 'none'})`,
             `- Relevant supported changes: ${r.affectedChanges.length}`,
+            `- **Relevant breaking changes: ${r.breakingChanges.length}**`,
+            `- Relevant compatible changes: ${r.compatibleChanges.length}`,
             `- Filtered package changes: ${r.unrelatedChanges.length}`,
             `- Unsupported usage patterns: ${r.unsupportedUsage?.length ?? 0}`,
             ''
@@ -96,16 +98,17 @@ jobs:
               const after = c.after
                 ? `${c.after.requiredParams} required / ${c.after.totalParams} total${c.after.hasRest ? ' / rest' : ''}`
                 : '-';
-              lines.push(`- **\`${c.symbol}\`** — \`${c.type}\` — files: ${files}`);
+              lines.push(`- **\`${c.symbol}\`** — \`${c.compatibility}\` — \`${c.type}\` — files: ${files}`);
               if (c.before || c.after) lines.push(`  - signature: ${before} → ${after}`);
+              if (c.reasons?.length) lines.push(`  - reason: ${c.reasons.join(', ')}`);
             }
             lines.push('');
           }
 
           lines.push(
-            r.affectedChanges.length === 0
-              ? '> Observation: no supported declaration change intersected the detected API paths.'
-              : '> Observation: supported declaration changes intersected API paths actually used by this repository.',
+            r.breakingChanges.length === 0
+              ? '> Result: no supported breaking change intersects the API paths detected in this repository.'
+              : '> Result: at least one supported breaking change intersects an API path actually used by this repository.',
             ''
           );
 
