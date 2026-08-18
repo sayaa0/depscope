@@ -136,7 +136,7 @@ async function main() {
   writeOutput('updates_json', JSON.stringify(updates));
 
   const lines = [
-    '# DepScope dependency impact',
+    '# TS Upgrade Impact',
     '',
     `Mode: **${mode}**`,
     '',
@@ -165,8 +165,8 @@ async function main() {
   if (updates.length) {
     lines.push(
       breakingCount
-        ? '> DepScope found supported breaking declaration changes intersecting API paths used by this repository.'
-        : '> DepScope found no supported breaking declaration change intersecting detected API paths.',
+        ? '> TS Upgrade Impact found supported breaking declaration changes intersecting API paths used by this repository.'
+        : '> TS Upgrade Impact found no supported breaking declaration change intersecting detected API paths.',
       ''
     );
   }
@@ -181,6 +181,6 @@ async function main() {
 }
 
 main().catch(error => {
-  console.error(`depscope action: ${error.message}`);
+  console.error(`ts-upgrade-impact action: ${error.message}`);
   process.exitCode = 1;
 });
