@@ -1,4 +1,4 @@
-name: DepScope
+name: TS Upgrade Impact
 
 description: Detect supported TypeScript dependency breaking changes that intersect APIs used by your repository.
 
@@ -60,7 +60,7 @@ outputs:
 runs:
   using: composite
   steps:
-    - name: Install DepScope runtime
+    - name: Install TS Upgrade Impact runtime
       shell: bash
       working-directory: ${{ github.action_path }}
       run: npm install --omit=dev --ignore-scripts --no-package-lock
