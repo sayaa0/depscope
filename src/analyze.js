@@ -25,11 +25,30 @@ function findDeclarationEntry(packageDir) {
   );
 }
 
-function signatureShape(checker, symbol, declaration) {
+function resolveAlias(checker, symbol) {
+  if (!(symbol.flags & ts.SymbolFlags.Alias)) return symbol;
+  try {
+    return checker.getAliasedSymbol(symbol);
+  } catch {
+    return symbol;
+  }
+}
+
+function getDeclaration(symbol, fallback) {
+  return symbol.valueDeclaration ?? symbol.declarations?.[0] ?? fallback?.declarations?.[0] ?? null;
+}
+
+function callableShape(checker, symbol, declaration) {
   const type = checker.getTypeOfSymbolAtLocation(symbol, declaration);
   const signatures = type.getCallSignatures();
 
-  if (signatures.length !== 1) return null;
+  if (signatures.length === 0) {
+    return { kind: 'symbol', callable: null, overloads: 0 };
+  }
+
+  if (signatures.length !== 1) {
+    return { kind: 'function', callable: null, overloads: signatures.length };
+  }
 
   const signature = signatures[0];
   const params = signature.getParameters();
@@ -38,7 +57,9 @@ function signatureShape(checker, symbol, declaration) {
 
   for (const param of params) {
     const decl = param.valueDeclaration ?? param.declarations?.[0];
-    if (!decl || !ts.isParameter(decl)) return null;
+    if (!decl || !ts.isParameter(decl)) {
+      return { kind: 'function', callable: null, overloads: 1 };
+    }
 
     if (decl.dotDotDotToken) hasRest = true;
     const optional = Boolean(decl.questionToken || decl.initializer || decl.dotDotDotToken);
@@ -46,10 +67,51 @@ function signatureShape(checker, symbol, declaration) {
   }
 
   return {
-    requiredParams: required,
-    totalParams: params.length,
-    hasRest,
+    kind: 'function',
+    callable: {
+      requiredParams: required,
+      totalParams: params.length,
+      hasRest,
+    },
+    overloads: 1,
   };
+}
+
+function getOneLevelMembers(checker, symbol, declaration) {
+  let candidates = [];
+
+  if (symbol.flags & (ts.SymbolFlags.ValueModule | ts.SymbolFlags.NamespaceModule)) {
+    try {
+      candidates = checker.getExportsOfModule(symbol);
+    } catch {
+      candidates = [];
+    }
+  } else if (symbol.flags & ts.SymbolFlags.Value) {
+    try {
+      const type = checker.getTypeOfSymbolAtLocation(symbol, declaration);
+      candidates = type.getProperties();
+    } catch {
+      candidates = [];
+    }
+  }
+
+  const members = new Map();
+  for (const candidate of candidates) {
+    const memberName = candidate.getName();
+    if (memberName === 'default' || memberName === 'export=') continue;
+
+    const target = resolveAlias(checker, candidate);
+    const memberDeclaration = getDeclaration(target, candidate);
+    if (!memberDeclaration) continue;
+
+    const shape = callableShape(checker, target, memberDeclaration);
+    members.set(memberName, {
+      name: memberName,
+      ...shape,
+    });
+  }
+
+  return members;
 }
 
 export function analyzePackageDeclarations(packageDir) {
@@ -78,27 +140,53 @@ export function analyzePackageDeclarations(packageDir) {
     const name = exported.getName();
     if (name === 'default' || name === 'export=') continue;
 
-    let target = exported;
-    if (exported.flags & ts.SymbolFlags.Alias) {
-      try {
-        target = checker.getAliasedSymbol(exported);
-      } catch {
-        target = exported;
-      }
-    }
-
-    const declaration = target.valueDeclaration ?? target.declarations?.[0] ?? exported.declarations?.[0];
+    const target = resolveAlias(checker, exported);
+    const declaration = getDeclaration(target, exported);
     if (!declaration) continue;
 
-    const callable = signatureShape(checker, target, declaration);
+    const shape = callableShape(checker, target, declaration);
+    const members = getOneLevelMembers(checker, target, declaration);
+
     symbols.set(name, {
       name,
-      kind: callable ? 'function' : 'symbol',
-      callable,
+      ...shape,
+      members,
     });
   }
 
   return { entry, symbols };
+}
+
+function callableChanged(before, after) {
+  return (
+    before.requiredParams !== after.requiredParams ||
+    before.totalParams !== after.totalParams ||
+    before.hasRest !== after.hasRest
+  );
+}
+
+function compareCallable(path, before, after, changeType, changes, notAnalyzed) {
+  if (before.kind !== 'function' || after.kind !== 'function') return;
+
+  if (!before.callable || !after.callable) {
+    notAnalyzed.push({
+      symbol: path,
+      reason: 'unsupported-call-signature',
+      beforeOverloads: before.overloads,
+      afterOverloads: after.overloads,
+    });
+    return;
+  }
+
+  if (callableChanged(before.callable, after.callable)) {
+    changes.push({
+      type: changeType,
+      confidence: 0.99,
+      symbol: path,
+      before: before.callable,
+      after: after.callable,
+    });
+  }
 }
 
 export function diffAnalyses(oldAnalysis, newAnalysis) {
@@ -112,27 +200,24 @@ export function diffAnalyses(oldAnalysis, newAnalysis) {
       continue;
     }
 
-    if (before.kind === 'function' && after.kind === 'function') {
-      if (!before.callable || !after.callable) {
-        notAnalyzed.push({ symbol: name, reason: 'unsupported-call-signature' });
+    compareCallable(name, before, after, 'function-arity-change', changes, notAnalyzed);
+
+    for (const [memberName, beforeMember] of before.members) {
+      const afterMember = after.members.get(memberName);
+      const path = `${name}.${memberName}`;
+
+      if (!afterMember) {
+        changes.push({
+          type: 'removed-member',
+          confidence: 1,
+          symbol: path,
+          parent: name,
+          member: memberName,
+        });
         continue;
       }
 
-      const b = before.callable;
-      const a = after.callable;
-      if (
-        b.requiredParams !== a.requiredParams ||
-        b.totalParams !== a.totalParams ||
-        b.hasRest !== a.hasRest
-      ) {
-        changes.push({
-          type: 'function-arity-change',
-          confidence: 0.99,
-          symbol: name,
-          before: b,
-          after: a,
-        });
-      }
+      compareCallable(path, beforeMember, afterMember, 'member-arity-change', changes, notAnalyzed);
     }
   }
 
