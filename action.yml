@@ -47,7 +47,7 @@ runs:
     - name: Install DepScope runtime
       shell: bash
       working-directory: ${{ github.action_path }}
-      run: npm ci --omit=dev --ignore-scripts
+      run: npm install --omit=dev --ignore-scripts --no-package-lock
 
     - name: Analyze dependency impact
       id: depscope
