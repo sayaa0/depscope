@@ -1,103 +1,147 @@
 # DepScope
 
-Experimental GitHub Action and CLI for finding TypeScript dependency changes that actually intersect APIs used by a consumer repository.
+DepScope is an experimental GitHub Action and CLI that asks a narrow question about an npm dependency upgrade:
 
-DepScope is intentionally conservative. It currently analyzes a narrow set of declaration changes with high confidence instead of attempting full TypeScript compatibility analysis.
+> Which supported declaration changes actually intersect APIs used by this TypeScript repository?
 
-## What it does
+It is deliberately precision-first. Unsupported or ambiguous TypeScript patterns are left unanalyzed instead of being guessed.
 
-For two npm package versions, DepScope:
+## GitHub Action: PR auto-detection
 
-1. extracts supported public declaration changes from the old and new package,
-2. scans a TypeScript consumer repository for package API usage,
-3. filters out package changes unrelated to detected usage,
-4. classifies supported changes as breaking or compatible,
-5. reports the affected files.
+For npm projects using `package-lock.json`, DepScope can infer direct dependency version changes from the pull request base/head. You do not need to specify the package name or versions.
 
-Current supported high-confidence checks include:
+```yaml
+name: dependency-impact
 
-- named exported symbol removal
-- one-level exported member removal
-- single-signature callable arity changes
-- required-parameter additions
-- accepted-parameter removals
-- rest-parameter removal
+on:
+  pull_request:
 
-Unsupported or ambiguous cases are left unanalyzed rather than guessed.
+permissions:
+  contents: read
 
-## GitHub Action
+jobs:
+  depscope:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: sayaa0/depscope@main
+        with:
+          fail_on_breaking: 'true'
+```
 
-Current experimental usage:
+During the current experimental phase, `@main` is used. A stable version tag should be used once the first release is published.
+
+The Action:
+
+1. reads `package.json` and `package-lock.json` at the PR base/head through the GitHub API;
+2. identifies changed direct dependency versions;
+3. compares supported public TypeScript declaration shapes between the old/new npm package versions;
+4. scans the checked-out consumer repository for matching API usage;
+5. reports only supported changes that intersect detected usage;
+6. optionally fails the job when a supported breaking change is found.
+
+Multiple direct dependency updates can be detected in one PR. Packages outside the current declaration-analysis scope are reported as unsupported rather than guessed.
+
+## Monorepo / nested package
 
 ```yaml
 - uses: sayaa0/depscope@main
-  id: depscope
+  with:
+    manifest_dir: apps/web
+    project_dir: apps/web
+    fail_on_breaking: 'true'
+```
+
+Auto-detection currently requires `package-lock.json` at both PR refs.
+
+## Manual Action mode
+
+You can still provide an explicit package/version pair:
+
+```yaml
+- uses: sayaa0/depscope@main
   with:
     package: zod
     from: 3.23.8
     to: 4.0.0
     project_dir: .
-    fail_on_breaking: 'false'
 ```
 
-The Action writes a dependency-impact report to the GitHub Actions Step Summary and exposes:
+## Outputs
 
+- `detected_update_count`
+- `analyzed_update_count`
+- `unsupported_update_count`
 - `breaking_count`
 - `compatible_count`
 - `relevant_count`
 - `filtered_count`
-
-Set `fail_on_breaking: 'true'` if supported breaking changes should fail the workflow.
-
-The current Action still requires explicit package/from/to versions. Automatic extraction from dependency-update PRs is not implemented yet.
+- `updates_json`
 
 ## CLI
 
 ```bash
 npm install
 node src/cli.js compare <package> <from> <to>
-node src/cli.js impact <package> <from> <to> [projectDir]
+node src/cli.js impact <package> <from> <to> <project-dir>
 ```
 
-Examples:
+Example:
 
 ```bash
-node src/cli.js compare zod 3.22.4 4.0.0
-node src/cli.js impact zod 3.23.8 4.0.0 ./my-project
+node src/cli.js impact zod 3.23.8 4.0.0 .
 ```
 
-JSON output:
+Use `--json` for machine-readable output.
 
-```bash
-node src/cli.js impact zod 3.23.8 4.0.0 ./my-project --json
-```
+## Current supported scope
 
-## Current validation
+Declaration analysis currently covers a deliberately small set of high-confidence cases:
 
-The repository includes CI checks against real npm packages and real public TypeScript consumers.
+- package-level `types` / `typings` declaration entry;
+- root `index.d.ts` fallback;
+- named exports resolved by the TypeScript checker;
+- one-level exported members such as `z.object`;
+- exported symbol/member removal;
+- single-call-signature arity changes;
+- consumer named imports;
+- one-level property access from imported namespace-like APIs.
 
-One known-breaking Zod 3 consumer is forcibly upgraded to Zod 4 in CI and compared against `tsc --noEmit`. In the current fixture, all 27 DepScope leaf-level breaking predictions appear in the TypeScript compiler error log for the predicted file.
+Breaking classification currently treats these as breaking candidates:
 
-This is an early proof-of-concept result, not a general precision claim.
+- exported symbol removal;
+- exported member removal;
+- required parameter addition;
+- accepted positional parameter removal when no rest parameter remains;
+- rest parameter removal.
 
-## MVP scope
+Call-domain relaxation, such as reducing the number of required parameters, is reported as compatible rather than breaking.
 
-Supported declaration entry points:
+## Not analyzed yet
 
-- package-level `types` / `typings`
-- root `index.d.ts` fallback
+- `@types/*` split-package resolution;
+- default-export semantics;
+- overload-set compatibility;
+- generic constraint compatibility;
+- semantic parameter/return-type narrowing and widening;
+- arbitrary-depth fluent API chains;
+- runtime behavior changes;
+- non-npm lockfile formats.
 
-Not analyzed yet:
+## Early validation
 
-- `@types/*` split packages
-- default export semantics
-- overload-set compatibility
-- generic constraint compatibility
-- semantic type narrowing/widening
-- deep chained API usage
-- runtime behavior changes
-- automatic package/version extraction from Dependabot or Renovate PRs
+The repository includes real-consumer tests rather than fixture-only tests.
+
+In one known Zod 3 → Zod 4 consumer, DepScope predicted 27 breaking API names in a specific source file. After forcing that repository onto Zod 4 and running `tsc --noEmit`, all 27 predicted leaf API names appeared in the compiler error log. This is one validation case, not a general precision claim.
+
+A separate real consumer using `z.object()` produced one relevant declaration change, which DepScope classified as compatible and therefore reported zero supported breaking changes.
+
+There is also an end-to-end pull-request integration fixture where no package/from/to inputs are supplied; DepScope infers `zod 3.23.8 → 4.0.0` from the PR and detects the expected breaking usage.
+
+## Privacy / trust boundary
+
+There is currently no DepScope application server. Consumer source scanning and package declaration comparison run inside the GitHub Actions runner. PR auto-detection reads only the repository's package metadata (`package.json` and `package-lock.json`) at the base/head refs using the workflow's GitHub token.
 
 ## Principle
 
-Precision first. If DepScope cannot justify a result from declarations and detected consumer usage, it should remain silent rather than invent risk.
+Precision first. A missing warning is preferable to a confident warning that DepScope cannot justify from the supported declaration and usage model.
