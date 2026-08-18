@@ -17,3 +17,19 @@ jobs:
           node-version: 20
       - run: npm install
       - run: npm test
+
+  real-package-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+      - run: npm install
+      - name: Compare real npm package versions
+        run: node src/cli.js compare zod 3.22.4 4.0.0 --json > smoke.json
+      - name: Validate smoke output
+        shell: bash
+        run: |
+          node -e "const fs=require('fs'); const r=JSON.parse(fs.readFileSync('smoke.json','utf8')); if(r.package!=='zod'||r.from!=='3.22.4'||r.to!=='4.0.0'||!Array.isArray(r.changes)||!Array.isArray(r.notAnalyzed)) process.exit(1); console.log('changes:', r.changes.length, 'notAnalyzed:', r.notAnalyzed.length);"
+          cat smoke.json
