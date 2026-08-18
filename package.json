@@ -1,0 +1,20 @@
+{
+  "name": "depscope",
+  "version": "0.0.1",
+  "description": "Minimal npm/TypeScript API diff CLI for dependency upgrade experiments",
+  "type": "module",
+  "bin": {
+    "depscope": "./src/cli.js"
+  },
+  "scripts": {
+    "test": "node --test",
+    "start": "node ./src/cli.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "typescript": "^5.8.3"
+  },
+  "license": "MIT"
+}
