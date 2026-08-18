@@ -1,10 +1,10 @@
 {
-  "name": "depscope",
+  "name": "ts-upgrade-impact",
   "version": "0.0.1",
   "description": "TypeScript dependency impact analysis for npm upgrade pull requests",
   "type": "module",
   "bin": {
-    "depscope": "./src/cli.js"
+    "ts-upgrade-impact": "./src/cli.js"
   },
   "scripts": {
     "test": "node --test",
