@@ -165,6 +165,29 @@ function callableChanged(before, after) {
   );
 }
 
+export function classifyCallableCompatibility(before, after) {
+  const reasons = [];
+
+  if (after.requiredParams > before.requiredParams) {
+    reasons.push('required-parameter-added');
+  }
+  if (after.totalParams < before.totalParams) {
+    reasons.push('accepted-parameter-removed');
+  }
+  if (before.hasRest && !after.hasRest) {
+    reasons.push('rest-parameter-removed');
+  }
+
+  if (reasons.length) {
+    return { compatibility: 'breaking', reasons };
+  }
+
+  return {
+    compatibility: 'compatible',
+    reasons: ['call-domain-not-narrowed'],
+  };
+}
+
 function compareCallable(path, before, after, changeType, changes, notAnalyzed) {
   if (before.kind !== 'function' || after.kind !== 'function') return;
 
@@ -179,12 +202,14 @@ function compareCallable(path, before, after, changeType, changes, notAnalyzed) 
   }
 
   if (callableChanged(before.callable, after.callable)) {
+    const classification = classifyCallableCompatibility(before.callable, after.callable);
     changes.push({
       type: changeType,
       confidence: 0.99,
       symbol: path,
       before: before.callable,
       after: after.callable,
+      ...classification,
     });
   }
 }
@@ -196,7 +221,13 @@ export function diffAnalyses(oldAnalysis, newAnalysis) {
   for (const [name, before] of oldAnalysis.symbols) {
     const after = newAnalysis.symbols.get(name);
     if (!after) {
-      changes.push({ type: 'removed-symbol', confidence: 1, symbol: name });
+      changes.push({
+        type: 'removed-symbol',
+        confidence: 1,
+        compatibility: 'breaking',
+        reasons: ['exported-symbol-removed'],
+        symbol: name,
+      });
       continue;
     }
 
@@ -204,22 +235,29 @@ export function diffAnalyses(oldAnalysis, newAnalysis) {
 
     for (const [memberName, beforeMember] of before.members) {
       const afterMember = after.members.get(memberName);
-      const path = `${name}.${memberName}`;
+      const memberPath = `${name}.${memberName}`;
 
       if (!afterMember) {
         changes.push({
           type: 'removed-member',
           confidence: 1,
-          symbol: path,
+          compatibility: 'breaking',
+          reasons: ['exported-member-removed'],
+          symbol: memberPath,
           parent: name,
           member: memberName,
         });
         continue;
       }
 
-      compareCallable(path, beforeMember, afterMember, 'member-arity-change', changes, notAnalyzed);
+      compareCallable(memberPath, beforeMember, afterMember, 'member-arity-change', changes, notAnalyzed);
     }
   }
 
-  return { changes, notAnalyzed };
+  return {
+    changes,
+    breakingChanges: changes.filter(change => change.compatibility === 'breaking'),
+    compatibleChanges: changes.filter(change => change.compatibility === 'compatible'),
+    notAnalyzed,
+  };
 }
