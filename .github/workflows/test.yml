@@ -181,3 +181,94 @@ jobs:
         with:
           name: depscope-known-breaking-impact
           path: known-breaking-impact.json
+
+  compiler-validation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+      - run: npm install
+      - name: Checkout known-breaking consumer
+        uses: actions/checkout@v6
+        with:
+          repository: qqharry21/my-portfolio-ts
+          ref: 0caae5a6ce6e78c95cee899998d1454b614afaf3
+          path: compiler-consumer
+      - name: Generate DepScope prediction
+        run: node src/cli.js impact zod 3.23.8 4.0.0 compiler-consumer --json > compiler-prediction.json
+      - name: Install consumer dependencies
+        working-directory: compiler-consumer
+        run: npm ci --ignore-scripts
+      - name: Replace only Zod with v4
+        working-directory: compiler-consumer
+        run: npm install --no-save --ignore-scripts --package-lock=false zod@4.0.0
+      - name: Run TypeScript compiler and capture expected failure
+        shell: bash
+        working-directory: compiler-consumer
+        run: |
+          set +e
+          npx tsc --pretty false --noEmit > ../tsc-zod4.log 2>&1
+          status=$?
+          echo "$status" > ../tsc-zod4.status
+          set -e
+          if [ "$status" -eq 0 ]; then
+            echo 'Expected TypeScript compilation to fail after upgrading this known-breaking consumer to Zod 4.'
+            cat ../tsc-zod4.log
+            exit 1
+          fi
+      - name: Compare DepScope prediction with compiler errors
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const prediction = JSON.parse(fs.readFileSync('compiler-prediction.json', 'utf8'));
+          const log = fs.readFileSync('tsc-zod4.log', 'utf8');
+          const targetLines = log.split(/\r?\n/).filter(line => line.includes('src/lib/zod-error-map.ts'));
+          if (targetLines.length === 0) {
+            console.error(log);
+            throw new Error('Compiler failed, but no error was reported in the DepScope-predicted target file.');
+          }
+
+          const predictedNames = prediction.breakingChanges.map(change => change.symbol);
+          const leafNames = [...new Set(predictedNames.map(name => name.split('.').at(-1)))];
+          const confirmedNames = leafNames.filter(name => log.includes(name));
+          const confirmationRate = predictedNames.length
+            ? Math.round((confirmedNames.length / predictedNames.length) * 100)
+            : 0;
+
+          const lines = [
+            '# DepScope vs TypeScript compiler',
+            '',
+            'Consumer: `qqharry21/my-portfolio-ts`, forced from Zod 3.23.8 to Zod 4.0.0',
+            '',
+            `- DepScope breaking predictions: **${predictedNames.length}**`,
+            `- TypeScript errors in predicted file: **${targetLines.length}**`,
+            `- Predicted leaf API names visible in compiler log: **${confirmedNames.length}**`,
+            `- Name-level confirmation rate: **${confirmationRate}%**`,
+            '',
+            '## Compiler errors in predicted file',
+            '',
+            '```text',
+            ...targetLines.slice(0, 80),
+            '```',
+            ''
+          ];
+
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join('\n'));
+          console.log('Predicted:', predictedNames);
+          console.log('Confirmed names:', confirmedNames);
+
+          if (confirmedNames.length === 0) {
+            throw new Error('None of the predicted breaking API names appeared in the TypeScript compiler output.');
+          }
+          NODE
+      - name: Upload compiler validation artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: depscope-compiler-validation
+          path: |
+            compiler-prediction.json
+            tsc-zod4.log
+            tsc-zod4.status
