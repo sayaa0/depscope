@@ -4,7 +4,7 @@ import { fetchPackageVersion } from './fetch-package.js';
 import { filterChangesByUsage, scanProjectUsage } from './usage.js';
 
 function usage() {
-  console.log(`ts-upgrade-impact 0.0.1\n\nUsage:\n  ts-upgrade-impact compare <package> <from> <to> [--json]\n  ts-upgrade-impact impact <package> <from> <to> [projectDir] [--json]\n\nExamples:\n  ts-upgrade-impact compare zod 3.22.4 4.0.0\n  ts-upgrade-impact impact zod 3.22.4 4.0.0 .\n`);
+  console.log(`ts-upgrade-impact 0.1.0\n\nUsage:\n  ts-upgrade-impact compare <package> <from> <to> [--json]\n  ts-upgrade-impact impact <package> <from> <to> [projectDir] [--json]\n\nExamples:\n  ts-upgrade-impact compare zod 3.22.4 4.0.0\n  ts-upgrade-impact impact zod 3.22.4 4.0.0 .\n`);
 }
 
 function formatSignature(shape) {
