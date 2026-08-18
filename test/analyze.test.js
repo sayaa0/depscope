@@ -61,3 +61,13 @@ test('classifies parameter removal and rest removal as breaking', () => {
     'breaking'
   );
 });
+
+test('does not call total parameter reduction breaking when a rest parameter still accepts extras', () => {
+  assert.equal(
+    classifyCallableCompatibility(
+      { requiredParams: 1, totalParams: 3, hasRest: true },
+      { requiredParams: 1, totalParams: 2, hasRest: true }
+    ).compatibility,
+    'compatible'
+  );
+});
