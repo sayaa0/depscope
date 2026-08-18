@@ -138,6 +138,8 @@ export function filterChangesByUsage(diff, usage) {
 
   return {
     affectedChanges,
+    breakingChanges: affectedChanges.filter(change => change.compatibility === 'breaking'),
+    compatibleChanges: affectedChanges.filter(change => change.compatibility === 'compatible'),
     unrelatedChanges,
     unsupportedUsage: usage.unsupported,
     importedSymbols: [...usage.usages.keys()].sort(),
