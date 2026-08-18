@@ -7,25 +7,39 @@ function usage() {
   console.log(`depscope 0.0.1\n\nUsage:\n  depscope compare <package> <from> <to> [--json]\n  depscope impact <package> <from> <to> [projectDir] [--json]\n\nExamples:\n  depscope compare zod 3.22.4 4.0.0\n  depscope impact zod 3.22.4 4.0.0 .\n`);
 }
 
+function formatSignature(shape) {
+  return `${shape.requiredParams} required / ${shape.totalParams} total${shape.hasRest ? ' / rest' : ''}`;
+}
+
+function formatChange(change, files = null) {
+  const label = change.compatibility === 'breaking' ? 'BREAKING' : 'COMPATIBLE';
+  const location = files?.length ? `; used in ${files.join(', ')}` : '';
+
+  if (change.type === 'removed-symbol' || change.type === 'removed-member') {
+    return `  [${label}] ${change.symbol}: removed${location}`;
+  }
+
+  if (change.before && change.after) {
+    return (
+      `  [${label}] ${change.symbol}: ${formatSignature(change.before)} -> ` +
+      `${formatSignature(change.after)}${location}`
+    );
+  }
+
+  return `  [${label}] ${change.symbol}: ${change.type}${location}`;
+}
+
 function formatHuman(pkg, from, to, result) {
   console.log(`DepScope: ${pkg} ${from} -> ${to}`);
+  console.log(`Breaking supported changes: ${result.breakingChanges.length}`);
+  console.log(`Compatible supported changes: ${result.compatibleChanges.length}`);
   console.log('');
 
   if (result.changes.length === 0) {
-    console.log('No supported breaking API changes detected.');
+    console.log('No supported API-shape changes detected.');
   } else {
-    console.log('Confirmed / high-confidence changes:');
     for (const change of result.changes) {
-      if (change.type === 'removed-symbol') {
-        console.log(`  [CONFIRMED] ${change.symbol}: exported symbol removed`);
-      } else if (change.type === 'function-arity-change') {
-        const b = change.before;
-        const a = change.after;
-        console.log(
-          `  [REVIEW] ${change.symbol}: params required ${b.requiredParams}->${a.requiredParams}, ` +
-          `total ${b.totalParams}->${a.totalParams}${b.hasRest !== a.hasRest ? ', rest changed' : ''}`
-        );
-      }
+      console.log(formatChange(change));
     }
   }
 
@@ -37,20 +51,17 @@ function formatHuman(pkg, from, to, result) {
 
 function formatImpact(pkg, from, to, impact) {
   console.log(`DepScope impact: ${pkg} ${from} -> ${to}`);
-  console.log(`Imported named symbols: ${impact.importedSymbols.length}`);
+  console.log(`Detected package API paths: ${impact.importedSymbols.length}`);
   console.log(`Relevant supported changes: ${impact.affectedChanges.length}`);
+  console.log(`Relevant breaking changes: ${impact.breakingChanges.length}`);
+  console.log(`Relevant compatible changes: ${impact.compatibleChanges.length}`);
   console.log('');
 
   if (!impact.affectedChanges.length) {
-    console.log('No supported package changes intersect detected named imports.');
+    console.log('No supported package changes intersect detected API paths.');
   } else {
     for (const change of impact.affectedChanges) {
-      const files = change.files.join(', ');
-      if (change.type === 'removed-symbol') {
-        console.log(`  [CONFIRMED] ${change.symbol}: removed; used in ${files}`);
-      } else if (change.type === 'function-arity-change') {
-        console.log(`  [REVIEW] ${change.symbol}: call signature arity changed; used in ${files}`);
-      }
+      console.log(formatChange(change, change.files));
     }
   }
 
